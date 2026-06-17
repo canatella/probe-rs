@@ -285,7 +285,10 @@ impl AddressIncrement {
             0b00 => Some(AddressIncrement::Off),
             0b01 => Some(AddressIncrement::Single),
             0b10 => Some(AddressIncrement::Packed),
-            _ => None,
+            // Reserved (0b11) can be read back from an AP in an undefined state
+            // (e.g. the nRF5340 network-core AHB-AP while held in FORCEOFF).
+            // Treat it as Off rather than failing the whole CSW parse / connect.
+            _ => Some(AddressIncrement::Off),
         }
     }
 }
