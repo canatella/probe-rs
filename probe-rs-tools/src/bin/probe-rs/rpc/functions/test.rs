@@ -148,6 +148,7 @@ fn list_tests_impl(
     let mut run_loop = RunLoop {
         core_id,
         cancellation_token: ctx.cancellation_token(),
+        tolerate_errors: false,
     };
 
     {
@@ -248,6 +249,7 @@ fn run_test_impl(
     let mut run_loop = RunLoop {
         core_id,
         cancellation_token: ctx.cancellation_token(),
+        tolerate_errors: false,
     };
 
     let poller = rtt_client.as_deref_mut().map(|client| RttPoller {

@@ -195,6 +195,9 @@ fn monitor_impl(
     let mut run_loop = RunLoop {
         core_id,
         cancellation_token: ctx.cancellation_token(),
+        // When we're not catching resets (e.g. the `rtt` command), survive the
+        // target rebooting: tolerate transient errors so RTT re-attaches.
+        tolerate_errors: !request.options.catch_reset,
     };
 
     {

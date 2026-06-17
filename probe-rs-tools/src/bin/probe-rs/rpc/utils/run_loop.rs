@@ -12,6 +12,11 @@ use crate::rpc::SessionState;
 pub struct RunLoop {
     pub core_id: usize,
     pub cancellation_token: CancellationToken,
+    /// Tolerate transient probe/core errors during polling instead of aborting
+    /// the loop. Set when we are not catching resets, so that log streaming
+    /// survives the target rebooting (the core is briefly inaccessible while it
+    /// resets; we retry rather than give up).
+    pub tolerate_errors: bool,
 }
 
 #[derive(PartialEq, Debug)]
@@ -131,15 +136,41 @@ impl RunLoop {
     where
         F: FnMut(HaltReason, &mut Core) -> Result<Option<R>>,
     {
+        // Honor cancellation (Ctrl-C / SIGINT) at the very top, before any
+        // fallible probe access. Otherwise the transient-error retry paths
+        // below return early and skip the cancellation check, so SIGINT would
+        // be ignored while the loop is retrying (e.g. during a reset).
+        if self.cancellation_token.is_cancelled() {
+            return Ok(ControlFlow::Break(ReturnReason::Cancelled));
+        }
+
         let mut session = shared_session.session_blocking();
-        let mut core = session.core(self.core_id)?;
+        let mut core = match session.core(self.core_id) {
+            Ok(core) => core,
+            // The core is briefly inaccessible while the target resets. When
+            // tolerating errors, retry instead of aborting the run loop.
+            Err(error) if self.tolerate_errors => {
+                tracing::debug!("Core access failed (target resetting?), retrying: {error}");
+                return Ok(ControlFlow::Continue(Duration::from_millis(100)));
+            }
+            Err(error) => return Err(error.into()),
+        };
 
         let mut next_poll = Duration::from_millis(100);
 
         // check for halt first, poll rtt after.
         // this is important so we do one last poll after halt, so we flush all messages
         // the core printed before halting, such as a panic message.
-        let return_reason = match core.status()? {
+        let status = match core.status() {
+            Ok(status) => status,
+            Err(error) if self.tolerate_errors => {
+                tracing::debug!("Core status read failed (target resetting?), retrying: {error}");
+                return Ok(ControlFlow::Continue(Duration::from_millis(100)));
+            }
+            Err(error) => return Err(error.into()),
+        };
+
+        let return_reason = match status {
             probe_rs::CoreStatus::Halted(reason) => match predicate(reason, &mut core) {
                 Ok(Some(r)) => Some(Ok(ReturnReason::Predicate(r))),
                 Err(e) => Some(Err(e)),
@@ -171,6 +202,11 @@ impl RunLoop {
         }
         match poller_result {
             Ok(delay) => next_poll = next_poll.min(delay),
+            // RTT reads can fail transiently while the target resets; tolerate
+            // and retry so streaming resumes once poll_channel re-attaches.
+            Err(error) if self.tolerate_errors => {
+                tracing::debug!("RTT poll failed (target resetting?), retrying: {error}");
+            }
             Err(error) => return Err(error),
         }
 
