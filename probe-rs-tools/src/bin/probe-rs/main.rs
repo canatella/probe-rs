@@ -126,6 +126,7 @@ impl Cli {
             Subcommand::Download(cmd) => cmd.run(client).await,
             Subcommand::Run(cmd) => cmd.run(client, utc_offset).await,
             Subcommand::Attach(cmd) => cmd.run(client, utc_offset).await,
+            Subcommand::Rtt(cmd) => cmd.run(client, utc_offset).await,
             Subcommand::Verify(cmd) => cmd.run(client).await,
             Subcommand::Erase(cmd) => cmd.run(client).await,
             Subcommand::Trace(cmd) => cmd.run(&mut *client.registry().await, &lister),
@@ -177,6 +178,8 @@ enum Subcommand {
     /// Attach to rtt logging
     #[clap(name = "attach")]
     Attach(cmd::attach::Cmd),
+    /// Stream RTT logs from a running target (no ELF needed, never halts it).
+    Rtt(cmd::rtt::Cmd),
     /// Trace a memory location on the target
     #[clap(name = "trace")]
     Trace(cmd::trace::Cmd),

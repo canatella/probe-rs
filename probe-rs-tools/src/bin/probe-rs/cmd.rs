@@ -16,6 +16,7 @@ pub mod mi;
 pub mod profile;
 pub mod read;
 pub mod reset;
+pub mod rtt;
 pub mod run;
 #[cfg(feature = "remote")]
 pub mod serve;
