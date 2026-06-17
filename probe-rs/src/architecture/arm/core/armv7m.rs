@@ -689,7 +689,7 @@ impl CoreInterface for Armv7m<'_> {
         if dhcsr.s_sleep() {
             // Check if we assumed the core to be halted
             if self.state.current_state.is_halted() {
-                tracing::warn!("Expected core to be halted, but core is running");
+                tracing::debug!("Expected core to be halted, but core is running");
             }
 
             self.set_core_status(CoreStatus::Sleeping);
